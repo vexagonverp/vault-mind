@@ -19,9 +19,9 @@ test("registers the public commander commands", () => {
   ]);
 });
 
-test("build command defaults to codex-cli", () => {
+test("build command defaults to vault output dir", () => {
   expect(command("build").opts()).toMatchObject({
-    platform: "codex-cli",
+    out: "vault",
   });
 });
 

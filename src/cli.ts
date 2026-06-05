@@ -4,7 +4,7 @@ import { readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
-import { buildPlatform, type Platform } from "./build.js";
+import { buildVault } from "./build.js";
 import { listCommands } from "./core/commands.js";
 import { renderWorkflowPrompt, normalizeWorkflowName } from "./core/workflows.js";
 import { writeArchitectureNotes } from "./vault/architect.js";
@@ -14,7 +14,6 @@ import { initVault } from "./vault/init.js";
 const filename = fileURLToPath(import.meta.url);
 const dirname = path.dirname(filename);
 const repoRoot = path.resolve(dirname, "..");
-const platforms: Platform[] = ["codex-cli", "gemini-cli"];
 
 export function createProgram(root = repoRoot): Command {
   const program = new Command();
@@ -38,20 +37,12 @@ export function createProgram(root = repoRoot): Command {
 
   program
     .command("build")
-    .description("Build platform files")
-    .option("--platform <platform>", `target platform: ${platforms.join(", ")}`, "codex-cli")
-    .option("--out <dir>", "output directory")
-    .action(async (options: { platform: string; out?: string }) => {
-      if (!isPlatform(options.platform)) {
-        throw new Error(`Unsupported platform: ${options.platform}`);
-      }
-
-      const outDir = path.resolve(
-        process.cwd(),
-        options.out ?? path.join("dist", options.platform),
-      );
-      await buildPlatform({ repoRoot: root, platform: options.platform, outDir });
-      console.log(`Built ${options.platform} -> ${path.relative(process.cwd(), outDir) || "."}`);
+    .description("Build agent skill files into a vault directory")
+    .option("--out <dir>", "output directory", "vault")
+    .action(async (options: { out: string }) => {
+      const outDir = path.resolve(process.cwd(), options.out);
+      await buildVault({ repoRoot: root, outDir });
+      console.log(`Built -> ${path.relative(process.cwd(), outDir) || "."}`);
     });
 
   program
@@ -121,7 +112,7 @@ export function createProgram(root = repoRoot): Command {
     .argument("<workflow>", "workflow name")
     .argument("[args...]", "workflow arguments")
     .option("--vault <vault>", "vault path", "vault")
-    .option("--repo <repo>", "repo path for obsidian-architect")
+    .option("--repo <repo>", "repo path for architect")
     .option("--json", "print machine-readable JSON where supported")
     .allowUnknownOption()
     .action(async (workflow: string, args: string[], options: {
@@ -132,20 +123,20 @@ export function createProgram(root = repoRoot): Command {
       const name = normalizeWorkflowName(workflow);
       const vaultPath = resolveVaultPath(options.vault);
 
-      if (name === "obsidian-health") {
+      if (name === "health") {
         await runHealthAction(vaultPath, options.json);
         return;
       }
 
-      if (name === "obsidian-init") {
+      if (name === "init") {
         await runInitAction(vaultPath);
         return;
       }
 
-      if (name === "obsidian-architect") {
+      if (name === "architect") {
         const repoPath = options.repo ?? args[0];
         if (!repoPath) {
-          throw new Error("obsidian-architect requires --repo <repo-path>");
+          throw new Error("architect requires --repo <repo-path>");
         }
         await runArchitectAction(path.resolve(repoPath), vaultPath, options.json);
         return;
@@ -173,10 +164,6 @@ function readPackage(root: string): { version: string } {
   return JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as {
     version: string;
   };
-}
-
-function isPlatform(value: string): value is Platform {
-  return (platforms as string[]).includes(value);
 }
 
 function resolveVaultPath(value = "vault"): string {

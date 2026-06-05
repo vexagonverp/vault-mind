@@ -16,12 +16,12 @@ const skipOrphanTopLevel = new Set([
   "raw",
 ]);
 const looseRootNotes = new Set(["Home.md", "index.md", "log.md", "SOUL.md", "CRITICAL_FACTS.md"]);
-const skipHealthFiles = new Set(["AGENTS.md", "GEMINI.md", "_CLAUDE.md"]);
+const skipHealthFiles = new Set(["AGENTS.md", "ANTIGRAVITY.md", "_CLAUDE.md"]);
 const skipEmptyDirs = new Set([
   ".git",
   ".agents",
   ".codex",
-  ".gemini",
+  ".antigravity",
   ".obsidian",
   ".trash",
   "_trash",

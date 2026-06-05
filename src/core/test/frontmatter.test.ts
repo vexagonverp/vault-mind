@@ -5,14 +5,14 @@ test("parses scalar and inline-array frontmatter", () => {
   const parsed = parseFrontmatter(withFrontmatter(`---
 description: Check vault
 category: meta
-exclude: [codex-cli, gemini-cli]
+tags: [health, meta]
 ai-first: true
 ---`));
 
   expect(hasFrontmatter(withFrontmatter("---\ndescription: Check vault\n---"))).toBe(true);
   expect(parsed.data.description).toBe("Check vault");
   expect(parsed.data.category).toBe("meta");
-  expect(parsed.data.exclude).toEqual(["codex-cli", "gemini-cli"]);
+  expect(parsed.data.tags).toEqual(["health", "meta"]);
   expect(parsed.data["ai-first"]).toBe(true);
   expect(parsed.content.trim()).toBe("Body");
 });

@@ -3,7 +3,6 @@ export interface CommandSpec {
   file: string;
   description: string;
   category: string;
-  exclude: string[];
   triggersEn: string[];
   body: string;
   raw: string;

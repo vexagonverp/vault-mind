@@ -25,8 +25,7 @@ concept notes only when they have useful durable content.
 After init, run:
 
 ```bash
-vaultmind build --platform codex-cli --out <vault-path>
-vaultmind build --platform gemini-cli --out <vault-path>
+vaultmind build --out <vault-path>
 ```
 
 ## Anti-Fabrication Rule

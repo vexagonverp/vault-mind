@@ -5,7 +5,7 @@ const DEFAULT_SKIP_DIRS = new Set([
   ".git",
   ".agents",
   ".codex",
-  ".gemini",
+  ".antigravity",
   ".obsidian",
   ".trash",
   "_trash",

@@ -2,47 +2,41 @@ import os from "node:os";
 import path from "node:path";
 import { access, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { expect, test } from "vitest";
-import { buildPlatform } from "../../build.js";
+import { buildVault } from "../../build.js";
 
 const repoRoot = path.resolve(import.meta.dirname, "../../..");
 
-test("codex build emits a repo skill instead of private command folders", async () => {
-  const outDir = await mkdtemp(path.join(os.tmpdir(), "vaultmind-codex-"));
+test("build emits umbrella skill and per-workflow skills", async () => {
+  const outDir = await mkdtemp(path.join(os.tmpdir(), "vaultmind-build-"));
 
-  await buildPlatform({ repoRoot, platform: "codex-cli", outDir });
+  await buildVault({ repoRoot, outDir });
 
   const agents = await read(outDir, "AGENTS.md");
   expect(agents).toMatch(/^---\n/);
   expectContainsAll(agents, [
     "type: agent-guidance",
     ".agents/skills/vault-mind/SKILL.md",
-    "not Codex slash",
-    "$vault-mind-obsidian-health",
+    "$vault-health",
+    "$vault-architect",
   ]);
 
   await expectPath(outDir, ".agents/skills/vault-mind/SKILL.md");
   expect(await read(outDir, ".agents/skills/vault-mind/SKILL.md")).toContain("not slash commands");
-  await expectPath(outDir, ".agents/skills/vault-mind/commands/obsidian-health.md");
-  expect(await read(outDir, ".agents/skills/vault-mind-obsidian-health/SKILL.md"))
-    .toContain("Vault Mind Workflow: obsidian-health");
+  await expectPath(outDir, ".agents/skills/vault-mind/commands/health.md");
+  expect(await read(outDir, ".agents/skills/vault-health/SKILL.md"))
+    .toContain("Vault Mind Workflow: health");
   expect(await read(outDir, ".agents/skills/vault-mind/references/ai-first-rules.md"))
     .not.toContain("[[wikilinks]]");
   expect(await read(outDir, ".agents/skills/vault-mind/references/ai-first-rules.md"))
     .toContain("Do not create phantom graph nodes");
 });
 
-test("gemini build configures AGENTS.md and emits command files", async () => {
-  const outDir = await mkdtemp(path.join(os.tmpdir(), "vaultmind-gemini-"));
+test("build writes architect workflow skill with required sections", async () => {
+  const outDir = await mkdtemp(path.join(os.tmpdir(), "vaultmind-architect-"));
 
-  await buildPlatform({ repoRoot, platform: "gemini-cli", outDir });
+  await buildVault({ repoRoot, outDir });
 
-  const agents = await read(outDir, "AGENTS.md");
-  expectContainsAll(agents, [
-    "vault-mind:gemini:start",
-    "run it instead of hand-writing",
-    "vault-mind-obsidian-architect",
-  ]);
-  expectContainsAll(await read(outDir, ".gemini/commands/vault-mind-obsidian-architect.md"), [
+  expectContainsAll(await read(outDir, ".agents/skills/vault-architect/SKILL.md"), [
     "## For future agent",
     "Do not hand-write",
     "Add agent analysis only inside `@agent`",
@@ -53,11 +47,8 @@ test("gemini build configures AGENTS.md and emits command files", async () => {
     "## 6. Anti-Fabrication Rules",
     "## 7. Search-Completeness Rules",
   ]);
-  expect(await read(outDir, ".gemini/settings.json")).toContain('"fileName": [');
-  await expectPath(outDir, ".gemini/commands/vault-mind-obsidian-health.md");
-  await expectMissingPath(outDir, ".gemini/commands/obsidian-health.md");
   for (const workflow of ["architect", "health", "init"]) {
-    expect(await read(outDir, `.gemini/commands/vault-mind-obsidian-${workflow}.md`))
+    expect(await read(outDir, `.agents/skills/vault-${workflow}/SKILL.md`))
       .toContain("False absence is the most common failure mode");
   }
 });
@@ -66,32 +57,27 @@ test("build preserves existing vault files", async () => {
   const outDir = await mkdtemp(path.join(os.tmpdir(), "vaultmind-existing-"));
   const note = path.join(outDir, "Personal.md");
   const agents = path.join(outDir, "AGENTS.md");
-  const gemini = path.join(outDir, "GEMINI.md");
 
   await writeFile(note, "# Personal\n", "utf8");
-  await writeFile(agents, "# Existing Codex Notes\n", "utf8");
-  await writeFile(gemini, "# Existing Gemini Notes\n", "utf8");
+  await writeFile(agents, "# Existing Notes\n", "utf8");
 
-  await buildPlatform({ repoRoot, platform: "codex-cli", outDir });
-  await buildPlatform({ repoRoot, platform: "gemini-cli", outDir });
+  await buildVault({ repoRoot, outDir });
 
   expect(await readFile(note, "utf8")).toBe("# Personal\n");
   expectContainsAll(await readFile(agents, "utf8"), [
-    "# Existing Codex Notes",
-    "vault-mind:codex:start",
-    "vault-mind:gemini:start",
+    "# Existing Notes",
+    "vault-mind:vault-mind:start",
   ]);
-  expect(await readFile(gemini, "utf8")).toContain("# Existing Gemini Notes");
 });
 
 test("build replaces generated blocks without expanding dollar replacement tokens", async () => {
   const outDir = await mkdtemp(path.join(os.tmpdir(), "vaultmind-rebuild-"));
 
-  await buildPlatform({ repoRoot, platform: "codex-cli", outDir });
-  await buildPlatform({ repoRoot, platform: "codex-cli", outDir });
+  await buildVault({ repoRoot, outDir });
+  await buildVault({ repoRoot, outDir });
 
   const agents = await read(outDir, "AGENTS.md");
-  expect(agents).toContain("Codex's `$` skill picker");
+  expect(agents).toContain("$vault-mind");
   expect(agents.match(/^---$/gm)).toHaveLength(2);
 });
 
@@ -101,10 +87,6 @@ async function read(root: string, file: string): Promise<string> {
 
 async function expectPath(root: string, file: string): Promise<void> {
   await expect(access(path.join(root, ...file.split("/")))).resolves.toBeUndefined();
-}
-
-async function expectMissingPath(root: string, file: string): Promise<void> {
-  await expect(access(path.join(root, ...file.split("/")))).rejects.toThrow();
 }
 
 function expectContainsAll(text: string, values: string[]): void {

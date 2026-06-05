@@ -20,7 +20,7 @@ language or \`/skills\` to invoke this skill.
 
 Example:
 
-\`$vault-mind run obsidian-health\`
+\`$vault-mind run health\`
 
 ${renderCommandTable(commands, "commands")}
 

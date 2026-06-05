@@ -15,7 +15,6 @@ export async function listCommands(commandsDir: string): Promise<CommandSpec[]> 
       file,
       description: stringValue(parsed.data.description),
       category: stringValue(parsed.data.category, "other"),
-      exclude: arrayValue(parsed.data.exclude),
       triggersEn: arrayValue(parsed.data.triggers_en),
       body: parsed.content,
       raw: text,
@@ -24,10 +23,6 @@ export async function listCommands(commandsDir: string): Promise<CommandSpec[]> 
 
   commands.sort((a, b) => a.name.localeCompare(b.name));
   return commands;
-}
-
-export function commandsForPlatform(commands: CommandSpec[], platform: string): CommandSpec[] {
-  return commands.filter((command) => !command.exclude.includes(platform));
 }
 
 function stringValue(value: unknown, fallback = ""): string {
