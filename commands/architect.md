@@ -104,6 +104,19 @@ Minimum vault output for a normal repo:
 - Additional architecture notes when source inspection reveals meaningful
   runtime flows, domains, integrations, infrastructure, or data models
 
+Module note policy:
+
+- Inspect every `core` source area listed in scan facts before deciding whether
+  it deserves its own note.
+- Create a module note only when the area is a real source-backed architecture
+  boundary, such as a domain, runtime subsystem, API surface, integration,
+  infrastructure unit, or state/data model.
+- Do not create one note per folder automatically. If a `core` area is only an
+  implementation folder, summarize it in the overview or scan-facts follow-up
+  notes instead.
+- Keep `support` areas to a short overview mention unless source inspection
+  shows they are substantial architecture pieces.
+
 Strongly prefer focused graph nodes over one giant overview. For a non-trivial
 repo, one or more extra architecture notes is expected unless source inspection
 shows the project is genuinely tiny.
@@ -163,7 +176,20 @@ Never invent:
 If the scan is thin, keep the notes short. Do not pad. Say what is unknown and
 what should be inspected next.
 
-## 7. Search-Completeness Rules
+## 7. Refresh Behavior
+
+If the architecture notes already exist, treat the run as a refresh:
+
+- re-scan the repo with `vaultmind architect`
+- update only generated blocks whose underlying scan facts changed
+- preserve `@agent` and `@user` blocks
+- preserve human-authored content outside generated blocks
+- keep `scanned-commit` in the overview frontmatter so readers know how current the docs are
+
+The CLI reports each note as `created`, `updated`, or `unchanged`. Use that
+report when summarizing what changed.
+
+## 8. Search-Completeness Rules
 
 Before claiming something is missing or absent:
 
@@ -175,7 +201,7 @@ Before claiming something is missing or absent:
 Do not claim exhaustive certainty unless you actually searched the relevant
 paths.
 
-## 8. Graph Rules
+## 9. Graph Rules
 
 - The project overview note must link every sibling architecture note.
 - Every module or key-decision note must link back to the project overview note.
@@ -183,12 +209,24 @@ paths.
   least one related sibling note.
 - Do not leave architecture notes orphaned.
 
-## 9. Report Back
+## 10. Vault Links And Operation Log
+
+After the CLI run, link the project overview from any existing project hub note
+or today's daily note if the vault has those structures. If the vault has no
+project hub or daily note, do not invent one just for this workflow; report that
+the backlink step was skipped.
+
+The CLI appends a one-line architecture refresh entry to `log.md`. If the log
+cannot be updated, report that blocker.
+
+## 11. Report Back
 
 Summarize:
 
 - the repo scanned
-- files written or refreshed
+- files created, refreshed, or unchanged
+- operation log entry written
+- project or daily backlinks added, or why they were skipped
 - which source-backed findings were added
 - any blockers or follow-up questions
 

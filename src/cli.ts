@@ -249,11 +249,20 @@ function printArchitect(result: Awaited<ReturnType<typeof writeArchitectureNotes
   console.log(`Repo: ${result.manifest.root}`);
   console.log(`Name: ${result.manifest.name}`);
   console.log(`Kind: ${result.manifest.kind ?? "unknown"}`);
+  console.log(`Scan commit: ${result.manifest.git?.commit ?? "not detected"}`);
   console.log(`Source areas: ${result.manifest.modules.length}`);
-  console.log("Written:");
-  for (const file of result.written) {
-    console.log(`- ${file}`);
+  console.log("Changes:");
+  for (const change of result.changes) {
+    console.log(`- ${change.status} ${change.file}${changeReason(change)}`);
   }
+  console.log(`Operation log: ${result.operationLog.file}`);
+}
+
+function changeReason(change: Awaited<ReturnType<typeof writeArchitectureNotes>>["changes"][number]): string {
+  const parts: string[] = [];
+  if (change.generatedChanged) parts.push("generated");
+  if (change.frontmatterChanged) parts.push("frontmatter");
+  return parts.length > 0 ? ` (${parts.join(", ")})` : "";
 }
 
 export function isCliEntrypoint(argvPath: string | undefined, modulePath = filename): boolean {

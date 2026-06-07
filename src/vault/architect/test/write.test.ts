@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { expectContainsAll, readPath, tempDir, tempVault, writePath } from "../../../test/helpers.js";
 import { scanCodebase } from "../scan.js";
 import { writeArchitectureNotes } from "../write.js";
-import type { ArchitectureManifest } from "../types.js";
+import type { ArchitectureManifest, ArchitectResult } from "../types.js";
 
 vi.mock("../scan.js", () => ({
   scanCodebase: vi.fn(),
@@ -24,12 +24,19 @@ describe("writeArchitectureNotes", () => {
     const overview = await vaultNote(vault, "Overview");
     const scanFacts = await vaultNote(vault, "Scan facts");
     const decisions = await vaultNote(vault, "Key decisions");
+    const operationLog = await readPath(vault, "log.md");
 
     expect(mockScanCodebase).toHaveBeenCalledWith(repo, { repoPath: repo, vaultPath: vault });
-    expect(result.written).toContain("Architecture/sample-app/Sample App - Overview.md");
-    expect(result.written).toContain("Architecture/sample-app/Sample App - Scan facts.md");
-    expect(result.written).not.toContain("Architecture/sample-app/Sample App - Cli.md");
+    expect(changedFiles(result)).toContain("Architecture/sample-app/Sample App - Overview.md");
+    expect(changedFiles(result)).toContain("Architecture/sample-app/Sample App - Scan facts.md");
+    expect(changedFiles(result)).not.toContain("Architecture/sample-app/Sample App - Cli.md");
+    expect(result.operationLog).toMatchObject({
+      file: "log.md",
+      entry: expect.stringContaining("[[Sample App - Overview]]"),
+    });
+    expect(changeStatuses(result)).toEqual(["created", "created", "created"]);
     expectContainsAll(overview, [
+      'scanned-commit: "abc123"',
       "<!-- @generated:start -->",
       "<!-- @agent:start -->",
       "## Agent notes",
@@ -51,6 +58,12 @@ describe("writeArchitectureNotes", () => {
       "[[Sample App - Overview]]",
       "[[Sample App - Scan facts]]",
     ]);
+    expectContainsAll(operationLog, [
+      "# Operation Log",
+      "architecture refresh: [[Sample App - Overview]]",
+      "3 created, 0 updated, 0 unchanged",
+      "commit abc123",
+    ]);
   });
 
   test("links existing sibling architecture notes", async () => {
@@ -63,10 +76,51 @@ describe("writeArchitectureNotes", () => {
 
     expect(await vaultNote(vault, "Overview")).toContain("[[Sample App - Runtime]]");
   });
+
+  test("reports refreshes and only writes generated blocks whose facts changed", async () => {
+    const repo = await tempDir("vaultmind-repo-");
+    const vault = await tempVault();
+    mockScanCodebase.mockResolvedValue(sampleManifest(repo));
+
+    await writeArchitectureNotes({ repoPath: repo, vaultPath: vault });
+
+    const unchanged = await writeArchitectureNotes({ repoPath: repo, vaultPath: vault });
+    const logAfterUnchangedRefresh = await readPath(vault, "log.md");
+    expect(changedFiles(unchanged)).toEqual([]);
+    expect(unchangedFiles(unchanged)).toEqual([
+      "Architecture/sample-app/Sample App - Overview.md",
+      "Architecture/sample-app/Sample App - Scan facts.md",
+      "Architecture/sample-app/Sample App - Key decisions.md",
+    ]);
+    expect(changeStatuses(unchanged)).toEqual(["unchanged", "unchanged", "unchanged"]);
+    expect(logAfterUnchangedRefresh.match(/architecture refresh:/g)).toHaveLength(2);
+    expect(logAfterUnchangedRefresh).toContain("0 created, 0 updated, 3 unchanged");
+
+    mockScanCodebase.mockResolvedValue(sampleManifest(repo, {
+      dependencies: ["commander", "zod"],
+    }));
+
+    const refreshed = await writeArchitectureNotes({ repoPath: repo, vaultPath: vault });
+    expect(changedFiles(refreshed)).toEqual(["Architecture/sample-app/Sample App - Scan facts.md"]);
+    expect(unchangedFiles(refreshed)).toEqual([
+      "Architecture/sample-app/Sample App - Overview.md",
+      "Architecture/sample-app/Sample App - Key decisions.md",
+    ]);
+    expect(refreshed.changes.find((change) =>
+      change.file.endsWith("Scan facts.md")
+    )).toMatchObject({
+      status: "updated",
+      generatedChanged: true,
+      frontmatterChanged: false,
+    });
+  });
 });
 
-function sampleManifest(root: string): ArchitectureManifest {
-  return {
+function sampleManifest(
+  root: string,
+  overrides: Partial<ArchitectureManifest> = {},
+): ArchitectureManifest {
+  const manifest: ArchitectureManifest = {
     root,
     name: "sample-app",
     slug: "sample-app",
@@ -102,6 +156,7 @@ function sampleManifest(root: string): ArchitectureManifest {
       dirty: false,
     },
   };
+  return { ...manifest, ...overrides };
 }
 
 async function vaultNote(vault: string, suffix: string): Promise<string> {
@@ -110,4 +165,16 @@ async function vaultNote(vault: string, suffix: string): Promise<string> {
 
 async function writeVaultNote(vault: string, suffix: string): Promise<void> {
   await writePath(vault, `Architecture/sample-app/Sample App - ${suffix}.md`, "# Existing note\n");
+}
+
+function changeStatuses(result: ArchitectResult): ArchitectResult["changes"][number]["status"][] {
+  return result.changes.map((change) => change.status);
+}
+
+function changedFiles(result: ArchitectResult): string[] {
+  return result.changes.filter((c) => c.status !== "unchanged").map((c) => c.file);
+}
+
+function unchangedFiles(result: ArchitectResult): string[] {
+  return result.changes.filter((c) => c.status === "unchanged").map((c) => c.file);
 }

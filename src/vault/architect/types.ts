@@ -51,5 +51,14 @@ export interface ArchitectWriteOptions extends ArchitectOptions {
 
 export interface ArchitectResult {
   manifest: ArchitectureManifest;
-  written: string[];
+  operationLog: {
+    file: string;
+    entry: string;
+  };
+  changes: Array<{
+    file: string;
+    status: "created" | "updated" | "unchanged";
+    generatedChanged: boolean;
+    frontmatterChanged: boolean;
+  }>;
 }

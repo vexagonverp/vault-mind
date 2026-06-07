@@ -46,11 +46,17 @@ test("build writes architect workflow skill with required sections", async () =>
     "Do not hand-write",
     "Add agent analysis only inside `@agent`",
     "## 5. Document Source-Backed Findings",
+    "Module note policy",
+    "Do not create one note per folder automatically",
     "A generic stack summary is not enough",
     "Useful graph node candidates",
     "Bad graph nodes",
     "## 6. Anti-Fabrication Rules",
-    "## 7. Search-Completeness Rules",
+    "## 7. Refresh Behavior",
+    "scanned-commit",
+    "## 8. Search-Completeness Rules",
+    "## 10. Vault Links And Operation Log",
+    "project hub note",
   ]);
   for (const workflow of ["architect", "health", "init"]) {
     expect(await readPath(outDir, `.agents/skills/vault-${workflow}/SKILL.md`))
