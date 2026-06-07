@@ -7,9 +7,9 @@ import { Command } from "commander";
 import { buildVault } from "./build.js";
 import { listCommands } from "./core/commands.js";
 import { renderWorkflowPrompt, normalizeWorkflowName } from "./core/workflows.js";
-import { writeArchitectureNotes } from "./vault/architect.js";
-import { runHealthCheck } from "./vault/health.js";
-import { initVault } from "./vault/init.js";
+import { writeArchitectureNotes } from "./vault/architect/index.js";
+import { runHealthCheck } from "./vault/health/index.js";
+import { initVault } from "./vault/init/index.js";
 
 const filename = fileURLToPath(import.meta.url);
 const dirname = path.dirname(filename);

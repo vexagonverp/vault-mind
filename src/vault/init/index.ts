@@ -1,5 +1,7 @@
 import path from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
+import { today } from "../../core/dates.js";
+import { isNodeError } from "../../core/files.js";
 
 export interface InitVaultResult {
   vault: string;
@@ -13,10 +15,10 @@ export async function initVault(vaultPath: string): Promise<InitVaultResult> {
   const skipped: string[] = [];
   await mkdir(vault, { recursive: true });
 
-  const today = new Date().toISOString().slice(0, 10);
+  const generatedDate = today();
   const files = new Map<string, string>([
-    ["index.md", renderIndex(today)],
-    ["log.md", renderLog(today)],
+    ["index.md", renderIndex(generatedDate)],
+    ["log.md", renderLog(generatedDate)],
   ]);
 
   for (const [relativePath, content] of files) {
@@ -32,7 +34,7 @@ async function writeIfMissing(file: string, content: string): Promise<"created" 
     await writeFile(file, content, { encoding: "utf8", flag: "wx" });
     return "created";
   } catch (error) {
-    if (isFileExists(error)) {
+    if (isNodeError(error, "EEXIST")) {
       return "skipped";
     }
     throw error;
@@ -81,13 +83,4 @@ every meaningful vault write, import, health check, or architecture refresh.
 
 - vault initialized
 `;
-}
-
-function isFileExists(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === "EEXIST"
-  );
 }

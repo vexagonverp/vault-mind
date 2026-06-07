@@ -1,8 +1,9 @@
 import path from "node:path";
 import { readdir } from "node:fs/promises";
-import { isString, listMarkdownFiles, readText, toVaultPath } from "../core/files.js";
-import { hasFrontmatter, parseFrontmatter } from "../core/frontmatter.js";
-import type { HealthIssue, HealthResult } from "../types.js";
+import { dateOnly } from "../../core/dates.js";
+import { DEFAULT_SKIP_DIRS, isString, listMarkdownFiles, readText, toVaultPath } from "../../core/files.js";
+import { frontmatterArrayValue, hasFrontmatter, parseFrontmatter } from "../../core/frontmatter.js";
+import type { HealthIssue, HealthResult } from "../../types.js";
 
 const wikilinkRe = /\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]/g;
 const templateRe = /<%.*?%>/s;
@@ -17,17 +18,7 @@ const skipOrphanTopLevel = new Set([
 ]);
 const looseRootNotes = new Set(["Home.md", "index.md", "log.md", "SOUL.md", "CRITICAL_FACTS.md"]);
 const skipHealthFiles = new Set(["AGENTS.md", "ANTIGRAVITY.md", "_CLAUDE.md"]);
-const skipEmptyDirs = new Set([
-  ".git",
-  ".agents",
-  ".codex",
-  ".antigravity",
-  ".obsidian",
-  ".trash",
-  "_trash",
-  "node_modules",
-  "dist",
-]);
+const skipEmptyDirs = DEFAULT_SKIP_DIRS;
 
 interface Note {
   file: string;
@@ -266,14 +257,7 @@ function extractWikilinks(content: string): string[] {
 }
 
 function aliasesFor(frontmatter: Record<string, unknown>): string[] {
-  const aliases = frontmatter.aliases;
-  if (Array.isArray(aliases)) {
-    return aliases.map(String);
-  }
-  if (typeof aliases === "string") {
-    return [aliases];
-  }
-  return [];
+  return frontmatterArrayValue(frontmatter.aliases);
 }
 
 function normalizeTarget(value: string): string {
@@ -300,7 +284,7 @@ function linkBasename(link: string): string {
 
 function isTaskLike(note: Note): boolean {
   const type = stringFrontmatterValue(note.frontmatter.type);
-  const tags = arrayFrontmatterValue(note.frontmatter.tags);
+  const tags = frontmatterArrayValue(note.frontmatter.tags);
   return type === "task" ||
     tags.includes("task") ||
     note.content.slice(0, 300).toLowerCase().includes("kanban-plugin: board");
@@ -311,23 +295,9 @@ function stringFrontmatterValue(value: unknown): string | undefined {
     return value;
   }
   if (value instanceof Date) {
-    return value.toISOString().slice(0, 10);
+    return dateOnly(value);
   }
   return undefined;
-}
-
-function arrayFrontmatterValue(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value.map(String);
-  }
-  return typeof value === "string" ? [value] : [];
-}
-
-function dateOnly(value: Date | string): string {
-  if (typeof value === "string") {
-    return value;
-  }
-  return value.toISOString().slice(0, 10);
 }
 
 function daysBetween(past: string, today: string): number {

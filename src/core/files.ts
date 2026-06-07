@@ -1,7 +1,7 @@
 import path from "node:path";
 import { access, cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 
-const DEFAULT_SKIP_DIRS = new Set([
+export const DEFAULT_SKIP_DIRS = new Set([
   ".git",
   ".agents",
   ".codex",
@@ -118,13 +118,12 @@ export function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+export function isNodeError(error: unknown, code: string): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === code;
+}
+
 export function isFileNotFound(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === "ENOENT"
-  );
+  return isNodeError(error, "ENOENT");
 }
 
 export function toVaultPath(value: string): string {

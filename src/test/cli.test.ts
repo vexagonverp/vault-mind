@@ -1,8 +1,8 @@
 import path from "node:path";
-import os from "node:os";
-import { mkdtemp, symlink, writeFile } from "node:fs/promises";
+import { symlink } from "node:fs/promises";
 import { expect, test } from "vitest";
 import { createProgram, isCliEntrypoint } from "../cli.js";
+import { rootPath, tempDir, writePath } from "./helpers.js";
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
 
@@ -36,11 +36,11 @@ test("architect command defaults to the local vault", () => {
 });
 
 test("CLI entrypoint accepts symlinked global bins", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "vaultmind-cli-"));
-  const target = path.join(root, "cli.js");
-  const linked = path.join(root, "vaultmind");
+  const root = await tempDir("vaultmind-cli-");
+  const target = rootPath(root, "cli.js");
+  const linked = rootPath(root, "vaultmind");
 
-  await writeFile(target, "#!/usr/bin/env node\n", "utf8");
+  await writePath(root, "cli.js", "#!/usr/bin/env node\n");
   await symlink(target, linked);
 
   expect(isCliEntrypoint(linked, target)).toBe(true);

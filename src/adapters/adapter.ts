@@ -6,6 +6,7 @@ import {
   writeGeneratedBlock,
   writeText,
 } from "../core/files.js";
+import { today } from "../core/dates.js";
 import type { CommandSpec } from "../types.js";
 import { renderSkill, skillName } from "./shared.js";
 
@@ -37,7 +38,7 @@ export async function buildAgentSkills({ repoRoot, outDir, commands }: BuildArgs
 
 function renderAgentsFrontmatter(): string {
   return `---
-date: ${new Date().toISOString().slice(0, 10)}
+date: ${today()}
 type: agent-guidance
 tags: [agent-guidance]
 ai-first: true

@@ -1,7 +1,7 @@
 import path from "node:path";
 import type { CommandSpec } from "../types.js";
 import { listMarkdownFiles, readText } from "./files.js";
-import { parseFrontmatter } from "./frontmatter.js";
+import { frontmatterArrayValue, frontmatterStringValue, parseFrontmatter } from "./frontmatter.js";
 
 export async function listCommands(commandsDir: string): Promise<CommandSpec[]> {
   const files = await listMarkdownFiles(commandsDir);
@@ -13,9 +13,9 @@ export async function listCommands(commandsDir: string): Promise<CommandSpec[]> 
     commands.push({
       name: path.basename(file, ".md"),
       file,
-      description: stringValue(parsed.data.description),
-      category: stringValue(parsed.data.category, "other"),
-      triggersEn: arrayValue(parsed.data.triggers_en),
+      description: frontmatterStringValue(parsed.data.description),
+      category: frontmatterStringValue(parsed.data.category, "other"),
+      triggersEn: frontmatterArrayValue(parsed.data.triggers_en),
       body: parsed.content,
       raw: text,
     });
@@ -23,21 +23,4 @@ export async function listCommands(commandsDir: string): Promise<CommandSpec[]> 
 
   commands.sort((a, b) => a.name.localeCompare(b.name));
   return commands;
-}
-
-function stringValue(value: unknown, fallback = ""): string {
-  if (value === undefined) {
-    return fallback;
-  }
-  return String(value);
-}
-
-function arrayValue(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value.map(String);
-  }
-  if (value === undefined || value === "") {
-    return [];
-  }
-  return [String(value)];
 }

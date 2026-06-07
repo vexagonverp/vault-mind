@@ -1,8 +1,7 @@
-import os from "node:os";
-import path from "node:path";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { expect, test } from "vitest";
-import { runHealthCheck } from "../health.js";
+import { rootPath, tempVault, writeNotes } from "../../../test/helpers.js";
+import { runHealthCheck } from "../index.js";
 
 test("health reports a clean linked two-note vault", async () => {
   const root = await tempVault();
@@ -28,7 +27,7 @@ Back to [[Home]].
 
 test("health reports structural issues from the richer audit", async () => {
   const root = await tempVault("vaultmind-issues-");
-  await mkdir(path.join(root, "Empty"));
+  await mkdir(rootPath(root, "Empty"));
   await writeNotes(root, {
     "Project Alpha.md": `---
 type: project
@@ -97,15 +96,3 @@ See [[AGENTS]] for agent guidance.
   expect(result.totalNotes).toBe(2);
   expect(result.totalIssues).toBe(0);
 });
-
-function tempVault(prefix = "vaultmind-"): Promise<string> {
-  return mkdtemp(path.join(os.tmpdir(), prefix));
-}
-
-async function writeNotes(root: string, notes: Record<string, string>): Promise<void> {
-  await Promise.all(
-    Object.entries(notes).map(([file, content]) =>
-      writeFile(path.join(root, file), content, "utf8"),
-    ),
-  );
-}
