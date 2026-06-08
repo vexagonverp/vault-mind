@@ -1,14 +1,13 @@
 import path from "node:path";
-import { execFile } from "node:child_process";
 import { readdir } from "node:fs/promises";
-import { promisify } from "node:util";
+import { git, gitInfo } from "../../core/git.js";
 import { fileExists, isString, readTextIfPresent, toVaultPath } from "../../core/files.js";
+import { languagesByExtension, sourceExtensions } from "../../core/languages.js";
+import { projectSlug, projectTitle } from "../../core/naming.js";
 import type {
   ArchitectOptions,
   ArchitectureManifest,
 } from "./types.js";
-
-const execFileAsync = promisify(execFile);
 
 type ArchitectureModule = ArchitectureManifest["modules"][number];
 type ArchitectureEvidenceFile = ArchitectureManifest["candidateEntryFiles"][number];
@@ -52,35 +51,6 @@ const supportDirs = new Set([
   "spec",
   "specs",
 ]);
-
-const languagesByExtension: Record<string, string> = {
-  ".py": "Python",
-  ".js": "JavaScript",
-  ".ts": "TypeScript",
-  ".tsx": "TypeScript",
-  ".jsx": "JavaScript",
-  ".go": "Go",
-  ".rs": "Rust",
-  ".rb": "Ruby",
-  ".java": "Java",
-  ".kt": "Kotlin",
-  ".swift": "Swift",
-  ".c": "C",
-  ".h": "C",
-  ".cpp": "C++",
-  ".cc": "C++",
-  ".cs": "C#",
-  ".php": "PHP",
-  ".sh": "Shell",
-  ".sql": "SQL",
-  ".vue": "Vue",
-  ".svelte": "Svelte",
-  ".md": "Markdown",
-};
-
-const sourceExtensions = new Set(
-  Object.keys(languagesByExtension).filter((extension) => extension !== ".md"),
-);
 
 interface ManifestInfo {
   name: string;
@@ -174,11 +144,7 @@ async function listFiles(root: string): Promise<FileScan> {
 
 async function listGitVisibleFiles(root: string): Promise<string[]> {
   try {
-    const { stdout } = await execFileAsync(
-      "git",
-      ["-C", root, "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
-      { maxBuffer: 50 * 1024 * 1024 },
-    );
+    const stdout = await git(root, ["ls-files", "--cached", "--others", "--exclude-standard", "-z"]);
     return stdout
       .split("\0")
       .filter((file) => file.length > 0)
@@ -618,24 +584,6 @@ async function sourceRoots(root: string, files: string[]): Promise<string[]> {
   return [root];
 }
 
-async function gitInfo(root: string): Promise<ArchitectureManifest["git"]> {
-  try {
-    const commit = await execGit(root, ["rev-parse", "--short", "HEAD"]);
-    if (commit.length === 0) {
-      return undefined;
-    }
-    const status = await execGit(root, ["status", "--porcelain"]);
-    return { commit, dirty: status.length > 0 };
-  } catch {
-    return undefined;
-  }
-}
-
-async function execGit(root: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync("git", ["-C", root, ...args]);
-  return stdout.trim();
-}
-
 function matchOne(text: string, pattern: RegExp): string | undefined {
   return pattern.exec(text)?.[1];
 }
@@ -709,30 +657,3 @@ function evidencePathRank(file: string): number {
   return rank;
 }
 
-function projectSlug(value: string): string {
-  const slug = value
-    .replace(/^@/, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return slug.length > 0 ? slug : "project";
-}
-
-function projectTitle(value: string): string {
-  const words = value
-    .replace(/^@/, "")
-    .replace(/[/:\\_.-]+/g, " ")
-    .trim()
-    .split(/\s+/)
-    .filter((word) => word.length > 0);
-
-  return words.map(formatTitleWord).join(" ") || "Project";
-}
-
-function formatTitleWord(word: string): string {
-  const acronym = word.toLowerCase();
-  if (["api", "cli", "ui", "ux", "sdk", "id", "url", "http"].includes(acronym)) {
-    return acronym.toUpperCase();
-  }
-  return `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`;
-}

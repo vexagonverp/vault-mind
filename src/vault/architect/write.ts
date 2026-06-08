@@ -1,7 +1,14 @@
 import path from "node:path";
 import { mkdir, readdir } from "node:fs/promises";
 import { today } from "../../core/dates.js";
-import { escapeRegExp, readTextIfPresent, toVaultPath, writeText } from "../../core/files.js";
+import { toVaultPath } from "../../core/files.js";
+import { renderBulletList } from "../../core/markdown.js";
+import {
+  renderNoteHeader,
+  writeManagedNote,
+  type ManagedNoteResult,
+} from "../../core/managed-notes.js";
+import { appendOperationLog } from "../../core/operation-log.js";
 import { scanCodebase } from "./scan.js";
 import type {
   ArchitectureManifest,
@@ -11,14 +18,6 @@ import type {
 
 type ArchitectureEvidenceFile = ArchitectureManifest["candidateEntryFiles"][number];
 type ArchitectureNoteCandidate = ArchitectureManifest["candidateArchitectureNotes"][number];
-type ArchitectureNoteWrite = ArchitectResult["changes"][number];
-
-interface NoteWriteResult {
-  file: string;
-  status: ArchitectureNoteWrite["status"];
-  generatedChanged: boolean;
-  frontmatterChanged: boolean;
-}
 
 export async function writeArchitectureNotes(
   options: ArchitectWriteOptions,
@@ -27,7 +26,7 @@ export async function writeArchitectureNotes(
   const vault = path.resolve(options.vaultPath);
   const architectureDir = path.join(vault, "Architecture", manifest.slug);
   const generatedDate = today();
-  const noteResults: NoteWriteResult[] = [];
+  const noteResults: ManagedNoteResult[] = [];
   const overviewTitle = `${manifest.title} - Overview`;
   const scanFactsTitle = `${manifest.title} - Scan facts`;
   const decisionsTitle = `${manifest.title} - Key decisions`;
@@ -39,37 +38,46 @@ export async function writeArchitectureNotes(
   ]);
 
   noteResults.push(
-    await writeArchitectureNote(
-      path.join(architectureDir, `${overviewTitle}.md`),
-      renderFrontmatter(generatedDate, "architecture-overview", manifest, {
+    await writeManagedNote({
+      file: path.join(architectureDir, `${overviewTitle}.md`),
+      header: renderFrontmatter(generatedDate, "architecture-overview", manifest, {
         scannedCommit: scannedCommit(manifest),
       }),
-      renderOverview(manifest, siblingTitles),
-      { frontmatter: { "scanned-commit": scannedCommit(manifest) } },
-    ),
+      generated: renderOverview(manifest, siblingTitles),
+      agentBlock: renderAgentBlock(),
+      frontmatter: { "scanned-commit": scannedCommit(manifest) },
+    }),
   );
 
   noteResults.push(
-    await writeArchitectureNote(
-      path.join(architectureDir, `${scanFactsTitle}.md`),
-      renderFrontmatter(generatedDate, "architecture-scan", manifest),
-      renderScanFacts(manifest),
-    ),
+    await writeManagedNote({
+      file: path.join(architectureDir, `${scanFactsTitle}.md`),
+      header: renderFrontmatter(generatedDate, "architecture-scan", manifest),
+      generated: renderScanFacts(manifest),
+      agentBlock: renderAgentBlock(),
+    }),
   );
 
   noteResults.push(
-    await writeArchitectureNote(
-      path.join(architectureDir, `${decisionsTitle}.md`),
-      renderFrontmatter(generatedDate, "adr", manifest),
-      renderDecisions(manifest),
-    ),
+    await writeManagedNote({
+      file: path.join(architectureDir, `${decisionsTitle}.md`),
+      header: renderFrontmatter(generatedDate, "adr", manifest),
+      generated: renderDecisions(manifest),
+      agentBlock: renderAgentBlock(),
+    }),
   );
 
   const changes = noteResults.map((result) => ({
     ...result,
     file: toVaultPath(path.relative(vault, result.file)),
   }));
-  const operationLog = await appendOperationLog(vault, generatedDate, manifest, overviewTitle, changes);
+  const operationLog = await appendOperationLog({
+    vault,
+    date: generatedDate,
+    summary: `architecture refresh: [[${overviewTitle}]] for ${manifest.name}`,
+    changes,
+    commit: scannedCommit(manifest),
+  });
 
   return {
     manifest,
@@ -99,78 +107,6 @@ async function architectureSiblingTitles(
   return [...titles].sort();
 }
 
-async function writeArchitectureNote(
-  file: string,
-  header: string,
-  generated: string,
-  options: { frontmatter?: Record<string, string> } = {},
-): Promise<NoteWriteResult> {
-  const start = "<!-- @generated:start -->";
-  const end = "<!-- @generated:end -->";
-  const block = `${start}\n${generated.trimEnd()}\n${end}\n`;
-  const current = await readTextIfPresent(file);
-  let generatedChanged = true;
-  let next: string;
-
-  if (current.includes(start) && current.includes(end)) {
-    const refreshed = current.replace(
-      new RegExp(`${escapeRegExp(start)}[\\s\\S]*?${escapeRegExp(end)}\\n?`),
-      block,
-    );
-    generatedChanged = refreshed !== current;
-    next = ensureEditableBlocks(refreshed);
-  } else {
-    next = current.trim().length > 0
-      ? `${current.trimEnd()}\n\n${block}${renderAgentBlock()}${renderUserBlock()}`
-      : `${header.trimEnd()}\n\n${block}${renderAgentBlock()}${renderUserBlock()}`;
-  }
-
-  const withFrontmatter = applyFrontmatterUpdates(next, options.frontmatter ?? {});
-  const frontmatterChanged = withFrontmatter !== next;
-
-  if (withFrontmatter === current) {
-    return {
-      file,
-      status: "unchanged",
-      generatedChanged: false,
-      frontmatterChanged: false,
-    };
-  }
-
-  await writeText(file, withFrontmatter);
-  return {
-    file,
-    status: current.length === 0 ? "created" : "updated",
-    generatedChanged,
-    frontmatterChanged,
-  };
-}
-
-function ensureEditableBlocks(content: string): string {
-  return ensureUserBlock(ensureAgentBlock(content));
-}
-
-function ensureAgentBlock(content: string): string {
-  if (content.includes("<!-- @agent:start -->")) {
-    return content;
-  }
-
-  const userStart = content.indexOf("<!-- @user:start -->");
-  if (userStart >= 0) {
-    return `${content.slice(0, userStart).trimEnd()}\n\n${renderAgentBlock()}${content.slice(userStart)}`;
-  }
-
-  return `${content.trimEnd()}\n\n${renderAgentBlock()}`;
-}
-
-function ensureUserBlock(content: string): string {
-  if (content.includes("<!-- @user:start -->")) {
-    return content;
-  }
-
-  return `${content.trimEnd()}\n\n${renderUserBlock()}`;
-}
-
 function renderAgentBlock(): string {
   return `<!-- @agent:start -->
 ## Agent notes
@@ -190,124 +126,25 @@ overview and back to it.
 `;
 }
 
-function renderUserBlock(): string {
-  return "<!-- @user:start -->\n## User notes\n\n<!-- @user:end -->\n";
-}
-
 function renderFrontmatter(
-  today: string,
+  date: string,
   type: string,
   manifest: ArchitectureManifest,
   options: { scannedCommit?: string } = {},
 ): string {
-  const frontmatter = [
-    "---",
-    `date: ${today}`,
-    `type: ${type}`,
-    "tags: [architecture]",
-    "ai-first: true",
-    `source-repo: ${yamlString(manifest.root)}`,
-    ...(options.scannedCommit === undefined
-      ? []
-      : [`scanned-commit: ${yamlString(options.scannedCommit)}`]),
-    "---",
-  ].join("\n");
-
-  return `${frontmatter}
-
-## For future agent
-This architecture note describes ${manifest.title} as scanned from ${manifest.root}.
-Generated sections may be refreshed; preserve anything in the user notes section.
-`;
+  return renderNoteHeader({
+    date,
+    type,
+    tags: ["architecture"],
+    sourceRepo: manifest.root,
+    ...(options.scannedCommit !== undefined && { scannedCommit: options.scannedCommit }),
+    preamble: `This architecture note describes ${manifest.title} as scanned from ${manifest.root}.
+Generated sections may be refreshed; preserve anything in the user notes section.`,
+  });
 }
 
 function scannedCommit(manifest: ArchitectureManifest): string {
   return manifest.git?.commit ?? "not detected";
-}
-
-function applyFrontmatterUpdates(content: string, updates: Record<string, string>): string {
-  const entries = Object.entries(updates);
-  if (entries.length === 0 || !content.startsWith("---\n")) {
-    return content;
-  }
-
-  const end = content.indexOf("\n---", 4);
-  if (end < 0) {
-    return content;
-  }
-
-  const frontmatter = content.slice(4, end).split("\n");
-  for (const [key, value] of entries) {
-    const rendered = `${key}: ${yamlString(value)}`;
-    const existing = frontmatter.findIndex((line) =>
-      new RegExp(`^${escapeRegExp(key)}\\s*:`).test(line)
-    );
-    if (existing >= 0) {
-      frontmatter[existing] = rendered;
-    } else {
-      frontmatter.push(rendered);
-    }
-  }
-
-  return `---\n${frontmatter.join("\n")}${content.slice(end)}`;
-}
-
-function yamlString(value: string): string {
-  return JSON.stringify(value);
-}
-
-async function appendOperationLog(
-  vault: string,
-  date: string,
-  manifest: ArchitectureManifest,
-  overviewTitle: string,
-  changes: ArchitectResult["changes"],
-): Promise<ArchitectResult["operationLog"]> {
-  const file = path.join(vault, "log.md");
-  const relativeFile = toVaultPath(path.relative(vault, file));
-  const entry = operationLogEntry(manifest, overviewTitle, changes);
-  const current = await readTextIfPresent(file);
-  await writeText(file, appendDatedLogEntry(current, date, entry));
-  return { file: relativeFile, entry };
-}
-
-function operationLogEntry(
-  manifest: ArchitectureManifest,
-  overviewTitle: string,
-  changes: ArchitectResult["changes"],
-): string {
-  const created = countChanges(changes, "created");
-  const updated = countChanges(changes, "updated");
-  const unchanged = countChanges(changes, "unchanged");
-  return `- architecture refresh: [[${overviewTitle}]] for ${manifest.name} ` +
-    `(${created} created, ${updated} updated, ${unchanged} unchanged; ` +
-    `commit ${scannedCommit(manifest)})`;
-}
-
-function countChanges(changes: ArchitectResult["changes"], status: ArchitectureNoteWrite["status"]): number {
-  return changes.filter((change) => change.status === status).length;
-}
-
-function appendDatedLogEntry(current: string, date: string, entry: string): string {
-  if (current.trim().length === 0) {
-    return `# Operation Log\n\n## ${date}\n\n${entry}\n`;
-  }
-
-  const heading = `## ${date}`;
-  const headingIndex = current.indexOf(heading);
-  if (headingIndex < 0) {
-    return `${current.trimEnd()}\n\n${heading}\n\n${entry}\n`;
-  }
-
-  const insertAt = nextHeadingIndex(current, headingIndex + heading.length);
-  const before = current.slice(0, insertAt).trimEnd();
-  const after = current.slice(insertAt);
-  return `${before}\n${entry}\n${after}`;
-}
-
-function nextHeadingIndex(content: string, from: number): number {
-  const match = /\n## \d{4}-\d{2}-\d{2}\b/.exec(content.slice(from));
-  return match === null ? content.length : from + match.index;
 }
 
 function renderOverview(manifest: ArchitectureManifest, siblingTitles: string[]): string {
@@ -373,19 +210,19 @@ ${manifest.dependencies.map((dependency) => `- ${dependency}`).join("\n") || "- 
 
 ### Manifest Files
 
-${renderPathList(manifest.manifestFiles, "No manifest files detected")}
+${renderBulletList(manifest.manifestFiles, "No manifest files detected")}
 
 ### Documentation
 
-${renderPathList(manifest.docs, "No documentation files detected")}
+${renderBulletList(manifest.docs, "No documentation files detected")}
 
 ### Config Files
 
-${renderPathList(manifest.configFiles, "No config files detected")}
+${renderBulletList(manifest.configFiles, "No config files detected")}
 
 ### Workflows
 
-${renderPathList(manifest.workflows, "No workflow files detected")}
+${renderBulletList(manifest.workflows, "No workflow files detected")}
 
 ## Source Areas
 
@@ -411,7 +248,7 @@ inspecting the listed evidence.
 
 ### Must Inspect First
 
-${renderPathList(mustInspect, "No priority inspection files detected")}
+${renderBulletList(mustInspect, "No priority inspection files detected")}
 
 ### Candidate Entry Files
 
@@ -437,10 +274,6 @@ function mustInspectFiles(manifest: ArchitectureManifest): string[] {
     ...manifest.configFiles,
     ...manifest.workflows,
   ])].slice(0, 30);
-}
-
-function renderPathList(paths: string[], empty: string): string {
-  return paths.length > 0 ? paths.map((file) => `- ${file}`).join("\n") : `- ${empty}`;
 }
 
 function renderEvidenceFiles(files: ArchitectureEvidenceFile[]): string {

@@ -1,11 +1,8 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { describe, expect, test } from "vitest";
 import { tempDir, writePath } from "../../../test/helpers.js";
+import { initGitRepo } from "../../../test/git.js";
 import { scanCodebase } from "../scan.js";
 import type { ArchitectureManifest } from "../types.js";
-
-const execFileAsync = promisify(execFile);
 
 describe("scanCodebase", () => {
   test("detects node manifest and source modules", async () => {
@@ -99,9 +96,7 @@ interface TestRepo {
 async function createRepo(): Promise<TestRepo> {
   const root = await tempDir("vaultmind-repo-");
   return {
-    initGit: async () => {
-      await execFileAsync("git", ["-C", root, "init"]);
-    },
+    initGit: () => initGitRepo(root),
     scan: () => scanCodebase(root),
     writeFile: (file, content) => writePath(root, file, content),
     writePackage: (manifest) => writePath(root, "package.json", JSON.stringify(manifest)),

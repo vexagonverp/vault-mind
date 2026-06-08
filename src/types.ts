@@ -31,3 +31,22 @@ export interface HealthResult {
   counts: Record<string, number>;
   issues: HealthIssue[];
 }
+
+export interface ReviewIssue {
+  type:
+    | "unfilled_agent_block"
+    | "missing_evidence"
+    | "broken_evidence_path";
+  severity: "error" | "warning" | "info";
+  message: string;
+  files: string[];
+}
+
+export interface ReviewResult {
+  vault: string;
+  scanned: string;
+  notesReviewed: number;
+  totalIssues: number;
+  counts: Record<string, number>;
+  issues: ReviewIssue[];
+}

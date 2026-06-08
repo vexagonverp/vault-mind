@@ -19,7 +19,9 @@
     "vault:build": "pnpm build && node dist/cli.js build --out vault",
     "vault:init": "pnpm build && node dist/cli.js init --path vault",
     "vault:health": "pnpm build && node dist/cli.js health --path vault",
+    "vault:review": "pnpm build && node dist/cli.js review --path vault",
     "vault:architect": "pnpm build && node dist/cli.js architect --vault vault",
+    "vault:antipatterns": "pnpm build && node dist/cli.js antipatterns --vault vault",
     "link": "pnpm build && pnpm add -g ."
   },
   "keywords": [
