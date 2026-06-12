@@ -24,8 +24,7 @@ Use the current vault unless the user gives a different vault path.
 
 ## 2. Run The Canonical Scan
 
-Run this from the `vault-mind` repo or from any shell where `vaultmind` is on
-`PATH`:
+Run from any shell where `vaultmind` is on `PATH`:
 
 ```bash
 vaultmind architect --repo <repo-path> --vault <vault-path>

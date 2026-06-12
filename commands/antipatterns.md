@@ -64,21 +64,67 @@ For each candidate, open the cited file and confirm the smell exists now. A file
 can be high-churn for healthy reasons (it is a real hub). Do not promote a lead
 to a finding without reading the code.
 
-## 5. Write Findings
+## 5. Reuse Existing Patterns (Dedup)
 
-Record findings only inside the `@agent` block. Each anti-pattern needs:
+Before naming anything, read the root index `Anti-patterns/_Index.md` and the
+`Anti-patterns/_patterns/` folder. If this repo's smell is an existing pattern,
+reuse that exact `[[pattern name]]` - do not coin a synonym. Merging by meaning
+is your job; the rollup only dedups by exact name. Coin a new name only for a
+genuinely new pattern.
+
+## 6. Write Findings (Instances)
+
+Record findings only inside the `@agent` block. A finding is one *instance* of an
+anti-pattern in this repo. Each needs:
 
 - a short symptom - what the bad pattern is
 - `Evidence:` a `path/to/file.ts:line`, a PR link, or a commit hash
 - a `confidence:` marker - `speculation` unless a source states it directly
 - a "Do instead:" fix, linking `CODING_GUIDELINES` where the repo has one
 
-Cluster findings by theme (error handling, data access, testing, etc.). Prefer
-focused sibling notes per theme for a large catalog; link them from this note
-and back. Do not edit the `@generated` block by hand; rerun the CLI to refresh
-it. Never edit `@user`.
+Then add one machine-readable marker line per finding so the index can roll it
+up. Keep all three fields on the same line:
 
-## 6. Verify
+```text
+pattern: [[Name]]; status: active; example: app/src/foo.ts:42
+```
+
+- `pattern:` - the durable pattern (reused from step 5, or new)
+- `status:` - `active`, or `resolved` once the instance is fixed
+- `example:` - one representative `path:line`; the index displays it and flags it
+  when the path no longer resolves
+
+Cluster findings by theme. Do not edit the `@generated` block by hand; rerun the
+CLI to refresh it. Never edit `@user`.
+
+## 7. Maintain Pattern Notes (The Durable Index)
+
+Instances die when the code is fixed; the *pattern* is the lesson that must
+survive. For each distinct pattern, create or update a durable note at:
+
+```text
+Anti-patterns/_patterns/<Pattern Name>.md
+```
+
+Give it frontmatter (`type: antipattern-pattern`, `status: active`) and a body
+that opens with the one-line rule ("Don't X - do Y instead"); the index pulls
+the first non-heading line as the rule. This note is the seed for
+`CODING_GUIDELINES`. Every
+instance's `pattern: [[Name]]` links up to it, so the pattern accumulates
+evidence across repos and persists at zero instances.
+
+Then refresh the deterministic cross-repo rollup:
+
+```bash
+vaultmind antipatterns --index --vault <vault-path>
+```
+
+This writes `Anti-patterns/_Index.md` - the durable master list: every pattern
+with its rule, its examples per repo (flagged when a path no longer resolves),
+and active/resolved counts. Any pattern referenced by an instance but missing a
+`_patterns/<Name>.md` note is listed under "Undefined Patterns"; write the note.
+
+## 8. Verify
 
 ```bash
 vaultmind review --path <vault-path>/Anti-patterns/<repo-slug>
@@ -88,7 +134,7 @@ Fix every `broken_evidence_path` (the cited file does not exist) and
 `missing_evidence` before reporting done. An anti-pattern whose citation does
 not resolve is not a finding.
 
-## 7. Report And Log
+## 9. Report And Log
 
 Summarize the repo scanned, signals surfaced, findings written (with their
 evidence), and any blockers. The CLI appends a one-line entry to `log.md`; if it

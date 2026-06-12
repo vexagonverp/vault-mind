@@ -18,3 +18,9 @@ export function frontmatterArrayValue(value: unknown): string[] {
   if (typeof value === "string" && value.length > 0) return [value];
   return [];
 }
+
+/** The `source-repo` path a scanned note was generated from, if recorded. */
+export function sourceRepoValue(frontmatter: Record<string, unknown>): string | undefined {
+  const value = frontmatter["source-repo"];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}

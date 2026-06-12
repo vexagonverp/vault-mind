@@ -61,6 +61,12 @@ knowledge vault. The umbrella skill is \`$vault-mind\`; individual workflow
 skills are also generated so they appear directly in the skill picker.
 
 ${commands.map((command) => `- \`$${workflowSkillName(command)}\` - ${command.description}`).join("\n")}
+
+## Before Implementing Or Reviewing Code
+
+If \`Anti-patterns/_Index.md\` exists, read it first. It is the cross-repo catalog
+of known anti-patterns ("what not to do") with real examples. Avoid repeating
+them when implementing, and call them out when reviewing.
 `;
 }
 

@@ -3,6 +3,7 @@ import { readdir } from "node:fs/promises";
 import { dateOnly } from "../../core/dates.js";
 import { DEFAULT_SKIP_DIRS, isString, listMarkdownFiles, readText, toVaultPath } from "../../core/files.js";
 import { frontmatterArrayValue, hasFrontmatter, parseFrontmatter } from "../../core/frontmatter.js";
+import { countIssuesByLabel } from "../../core/issues.js";
 import type { HealthIssue, HealthResult } from "../../types.js";
 
 const wikilinkRe = /\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]/g;
@@ -75,18 +76,12 @@ export async function runHealthCheck(
     ...checkTemplateLeftovers(notes),
   ];
 
-  const counts = issues.reduce<Record<string, number>>((acc, issue) => {
-    const label = issueLabelMap[issue.type];
-    acc[label] = (acc[label] ?? 0) + 1;
-    return acc;
-  }, {});
-
   return {
     vault: vaultPath,
     scanned: today,
     totalNotes: notes.length,
     totalIssues: issues.length,
-    counts,
+    counts: countIssuesByLabel(issues, issueLabelMap),
     issues,
   };
 }

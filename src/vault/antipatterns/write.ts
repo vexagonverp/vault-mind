@@ -2,8 +2,15 @@ import path from "node:path";
 import { mkdir } from "node:fs/promises";
 import { today } from "../../core/dates.js";
 import { toVaultPath } from "../../core/files.js";
+import { commitLabel, describeGitInfo } from "../../core/git.js";
 import { renderBulletList } from "../../core/markdown.js";
-import { renderNoteHeader, writeManagedNote } from "../../core/managed-notes.js";
+import {
+  AGENT_END,
+  AGENT_PLACEHOLDER_SENTINEL,
+  AGENT_START,
+  renderNoteHeader,
+  writeManagedNote,
+} from "../../core/managed-notes.js";
 import { appendOperationLog } from "../../core/operation-log.js";
 import { scanAntipatterns } from "./scan.js";
 import type {
@@ -27,7 +34,7 @@ export async function writeAntipatternNotes(
     header: renderHeader(generatedDate, signals),
     generated: renderSignals(signals),
     agentBlock: renderAgentBlock(),
-    frontmatter: { "scanned-commit": scannedCommit(signals) },
+    frontmatter: { "scanned-commit": commitLabel(signals.git) },
   });
 
   const change = { ...result, file: toVaultPath(path.relative(vault, result.file)) };
@@ -36,7 +43,7 @@ export async function writeAntipatternNotes(
     date: generatedDate,
     summary: `anti-pattern scan: [[${title}]] for ${signals.name}`,
     changes: [change],
-    commit: scannedCommit(signals),
+    commit: commitLabel(signals.git),
   });
 
   return { signals, operationLog, changes: [change] };
@@ -48,7 +55,7 @@ function renderHeader(date: string, signals: AntipatternSignals): string {
     type: "antipatterns",
     tags: ["antipatterns"],
     sourceRepo: signals.root,
-    scannedCommit: scannedCommit(signals),
+    scannedCommit: commitLabel(signals.git),
     preamble: `This note catalogs anti-patterns ("what not to do") in ${signals.title}, scanned
 from ${signals.root}. The generated section lists deterministic git-history
 signals; treat them as leads. The agent section holds source-backed findings.`,
@@ -62,7 +69,7 @@ function renderSignals(signals: AntipatternSignals): string {
 
 - Repo: ${signals.title}
 - Root: ${signals.root}
-- Git: ${signals.git ? `${signals.git.commit}${signals.git.dirty ? " (dirty)" : ""}` : "not detected"}
+- Git: ${describeGitInfo(signals.git)}
 - History scan: ${signals.scanSource === "git" ? `${signals.commitsScanned} commits` : "no git history detected"}
 
 ## Change Hotspots
@@ -94,10 +101,10 @@ ${renderBulletList(signals.remediationCommits.map((commit) => `${commit.hash} ${
 }
 
 function renderAgentBlock(): string {
-  return `<!-- @agent:start -->
+  return `${AGENT_START}
 ## Anti-pattern findings
 
-Add source-backed findings here. Each anti-pattern needs:
+${AGENT_PLACEHOLDER_SENTINEL}. Each anti-pattern needs:
 
 - a short symptom (what the bad pattern is)
 - \`Evidence:\` a \`path/to/file.ts:line\`, a PR link, or a commit hash
@@ -108,10 +115,6 @@ Use the signals above as leads, not findings. Inspect the cited files and their
 pull-request review comments (gh) before deciding a pattern is real and
 recurring rather than a one-off nitpick.
 
-<!-- @agent:end -->
+${AGENT_END}
 `;
-}
-
-function scannedCommit(signals: AntipatternSignals): string {
-  return signals.git?.commit ?? "not detected";
 }

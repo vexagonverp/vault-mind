@@ -8,9 +8,7 @@ triggers_en: ["vault health", "check my vault", "audit vault", "find vault issue
 Use this workflow to inspect vault structure and report issues. It is read-only;
 do not patch the vault while running health.
 
-Use vault-mind. Run the CLI command below from the vault-mind repo:
-
-Run:
+Run from any shell where `vaultmind` is on `PATH`:
 
 ```bash
 vaultmind health --path <vault-path>

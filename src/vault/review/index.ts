@@ -1,7 +1,8 @@
 import path from "node:path";
 import { dateOnly } from "../../core/dates.js";
-import { fileExists, listMarkdownFiles, readText, toVaultPath } from "../../core/files.js";
-import { parseFrontmatter } from "../../core/frontmatter.js";
+import { fileExists, listMarkdownFiles, readText, stripLineReference, toVaultPath } from "../../core/files.js";
+import { parseFrontmatter, sourceRepoValue } from "../../core/frontmatter.js";
+import { countIssuesByLabel } from "../../core/issues.js";
 import { AGENT_END, AGENT_PLACEHOLDER_SENTINEL, AGENT_START } from "../../core/managed-notes.js";
 import type { ReviewIssue, ReviewResult } from "../../types.js";
 
@@ -41,18 +42,12 @@ export async function reviewVault(
     issues.push(...(await reviewNote(rel, block, content)));
   }
 
-  const counts = issues.reduce<Record<string, number>>((acc, issue) => {
-    const label = issueLabelMap[issue.type];
-    acc[label] = (acc[label] ?? 0) + 1;
-    return acc;
-  }, {});
-
   return {
     vault: vaultPath,
     scanned: today,
     notesReviewed,
     totalIssues: issues.length,
-    counts,
+    counts: countIssuesByLabel(issues, issueLabelMap),
     issues,
   };
 }
@@ -78,7 +73,7 @@ async function reviewNote(rel: string, block: string, content: string): Promise<
     });
   }
 
-  const repoRoot = sourceRepo(content);
+  const repoRoot = sourceRepoValue(parseFrontmatter(content).data);
   if (repoRoot !== undefined && (await fileExists(repoRoot))) {
     for (const evidencePath of evidencePaths(block)) {
       if (!(await fileExists(path.join(repoRoot, evidencePath)))) {
@@ -115,12 +110,6 @@ function isUnfilled(block: string): boolean {
   return stripped.length === 0;
 }
 
-function sourceRepo(content: string): string | undefined {
-  const data = parseFrontmatter(content).data as { "source-repo"?: unknown };
-  const value = data["source-repo"];
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
 function evidencePaths(block: string): string[] {
   const paths = new Set<string>();
   for (const match of block.matchAll(/Evidence:([^\n]*)/g)) {
@@ -139,7 +128,7 @@ function normalizeEvidenceToken(raw: string): string | undefined {
   if (/^https?:\/\//i.test(token)) {
     return undefined;
   }
-  const candidate = token.replace(/:\d+(?:-\d+)?$/, "").replace(/^\.\//, "");
+  const candidate = stripLineReference(token).replace(/^\.\//, "");
   if (candidate.length < 3 || !/^[\w@./-]+$/.test(candidate)) {
     return undefined;
   }

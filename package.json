@@ -22,6 +22,7 @@
     "vault:review": "pnpm build && node dist/cli.js review --path vault",
     "vault:architect": "pnpm build && node dist/cli.js architect --vault vault",
     "vault:antipatterns": "pnpm build && node dist/cli.js antipatterns --vault vault",
+    "vault:antipatterns:index": "pnpm build && node dist/cli.js antipatterns --index --vault vault",
     "link": "pnpm build && pnpm add -g ."
   },
   "keywords": [

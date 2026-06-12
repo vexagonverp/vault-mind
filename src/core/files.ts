@@ -62,11 +62,13 @@ export async function copyTree(source: string, destination: string): Promise<voi
   });
 }
 
-export async function listMarkdownFiles(
+/** Recursively list files under `root`, skipping `skipDirs` directories. Sorted. */
+export async function listFiles(
   root: string,
-  options: { skipDirs?: Set<string> } = {},
+  options: { skipDirs?: Set<string>; filter?: (name: string) => boolean } = {},
 ): Promise<string[]> {
   const skipDirs = options.skipDirs ?? DEFAULT_SKIP_DIRS;
+  const filter = options.filter ?? (() => true);
   const files: string[] = [];
 
   async function walk(dir: string): Promise<void> {
@@ -85,7 +87,7 @@ export async function listMarkdownFiles(
         }
         continue;
       }
-      if (entry.isFile() && entry.name.endsWith(".md")) {
+      if (entry.isFile() && filter(entry.name)) {
         files.push(full);
       }
     }
@@ -94,6 +96,13 @@ export async function listMarkdownFiles(
   await walk(root);
   files.sort();
   return files;
+}
+
+export async function listMarkdownFiles(
+  root: string,
+  options: { skipDirs?: Set<string> } = {},
+): Promise<string[]> {
+  return listFiles(root, { ...options, filter: (name) => name.endsWith(".md") });
 }
 
 export async function readTextIfPresent(file: string): Promise<string> {
@@ -128,6 +137,11 @@ export function isFileNotFound(error: unknown): boolean {
 
 export function toVaultPath(value: string): string {
   return value.split(path.sep).join("/");
+}
+
+/** Drop a trailing `:line` or `:start-end` reference from a cited path. */
+export function stripLineReference(value: string): string {
+  return value.replace(/:\d+(?:-\d+)?$/, "");
 }
 
 export function isString(value: unknown): value is string {

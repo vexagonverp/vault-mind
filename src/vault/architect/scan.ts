@@ -1,7 +1,7 @@
 import path from "node:path";
 import { readdir } from "node:fs/promises";
 import { git, gitInfo } from "../../core/git.js";
-import { fileExists, isString, readTextIfPresent, toVaultPath } from "../../core/files.js";
+import { fileExists, isString, listFiles, readTextIfPresent, toVaultPath } from "../../core/files.js";
 import { languagesByExtension, sourceExtensions } from "../../core/languages.js";
 import { projectSlug, projectTitle } from "../../core/naming.js";
 import type {
@@ -72,7 +72,7 @@ export async function scanCodebase(
 ): Promise<ArchitectureManifest> {
   const root = path.resolve(repoPath);
   const maxModules = options.maxModules ?? 12;
-  const scan = await listFiles(root);
+  const scan = await scanFiles(root);
   const manifest = await detectManifest(root);
   const roots = await sourceRoots(root, scan.files);
   const candidateEntryFiles = detectCandidateEntryFiles(root, scan.files, manifest.scripts);
@@ -101,7 +101,7 @@ export async function scanCodebase(
   };
 }
 
-async function listFiles(root: string): Promise<FileScan> {
+async function scanFiles(root: string): Promise<FileScan> {
   const gitFiles = await listGitVisibleFiles(root);
   if (gitFiles.length > 0) {
     return {
@@ -110,34 +110,8 @@ async function listFiles(root: string): Promise<FileScan> {
     };
   }
 
-  const files: string[] = [];
-
-  async function walk(dir: string): Promise<void> {
-    let entries;
-    try {
-      entries = await readdir(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-
-    for (const entry of entries) {
-      if (skipDirs.has(entry.name)) {
-        continue;
-      }
-
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        await walk(full);
-      } else if (entry.isFile()) {
-        files.push(full);
-      }
-    }
-  }
-
-  await walk(root);
-  files.sort();
   return {
-    files,
+    files: await listFiles(root, { skipDirs }),
     source: "filesystem",
   };
 }

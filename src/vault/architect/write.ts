@@ -2,8 +2,12 @@ import path from "node:path";
 import { mkdir, readdir } from "node:fs/promises";
 import { today } from "../../core/dates.js";
 import { toVaultPath } from "../../core/files.js";
+import { commitLabel, describeGitInfo } from "../../core/git.js";
 import { renderBulletList } from "../../core/markdown.js";
 import {
+  AGENT_END,
+  AGENT_PLACEHOLDER_SENTINEL,
+  AGENT_START,
   renderNoteHeader,
   writeManagedNote,
   type ManagedNoteResult,
@@ -41,11 +45,11 @@ export async function writeArchitectureNotes(
     await writeManagedNote({
       file: path.join(architectureDir, `${overviewTitle}.md`),
       header: renderFrontmatter(generatedDate, "architecture-overview", manifest, {
-        scannedCommit: scannedCommit(manifest),
+        scannedCommit: commitLabel(manifest.git),
       }),
       generated: renderOverview(manifest, siblingTitles),
       agentBlock: renderAgentBlock(),
-      frontmatter: { "scanned-commit": scannedCommit(manifest) },
+      frontmatter: { "scanned-commit": commitLabel(manifest.git) },
     }),
   );
 
@@ -76,7 +80,7 @@ export async function writeArchitectureNotes(
     date: generatedDate,
     summary: `architecture refresh: [[${overviewTitle}]] for ${manifest.name}`,
     changes,
-    commit: scannedCommit(manifest),
+    commit: commitLabel(manifest.git),
   });
 
   return {
@@ -108,10 +112,10 @@ async function architectureSiblingTitles(
 }
 
 function renderAgentBlock(): string {
-  return `<!-- @agent:start -->
+  return `${AGENT_START}
 ## Agent notes
 
-Add source-backed findings here. Important claims need \`Evidence:\` and
+${AGENT_PLACEHOLDER_SENTINEL}. Important claims need \`Evidence:\` and
 \`confidence:\` markers. A generic summary without inspected source paths is
 incomplete.
 
@@ -122,7 +126,7 @@ Prefer focused sibling architecture notes for real runtime flows, domains,
 integrations, infrastructure, data models, or state models. Link them from the
 overview and back to it.
 
-<!-- @agent:end -->
+${AGENT_END}
 `;
 }
 
@@ -143,10 +147,6 @@ Generated sections may be refreshed; preserve anything in the user notes section
   });
 }
 
-function scannedCommit(manifest: ArchitectureManifest): string {
-  return manifest.git?.commit ?? "not detected";
-}
-
 function renderOverview(manifest: ArchitectureManifest, siblingTitles: string[]): string {
   return `# ${manifest.title} - Overview
 
@@ -155,7 +155,7 @@ function renderOverview(manifest: ArchitectureManifest, siblingTitles: string[])
 - Repo: ${manifest.title}
 - Root: ${manifest.root}
 - Kind: ${manifest.kind ?? "unknown"}
-- Git: ${manifest.git ? `${manifest.git.commit}${manifest.git.dirty ? " (dirty)" : ""}` : "not detected"}
+- Git: ${describeGitInfo(manifest.git)}
 
 ## Architecture Notes
 
@@ -184,7 +184,7 @@ function renderScanFacts(manifest: ArchitectureManifest): string {
 - Repo: ${manifest.title}
 - Root: ${manifest.root}
 - Kind: ${manifest.kind ?? "unknown"}
-- Git: ${manifest.git ? `${manifest.git.commit}${manifest.git.dirty ? " (dirty)" : ""}` : "not detected"}
+- Git: ${describeGitInfo(manifest.git)}
 - File scan: ${manifest.scanSource === "git" ? "git tracked and unignored files" : "filesystem walk"} (${manifest.filesScanned} files)
 
 ## Source Roots

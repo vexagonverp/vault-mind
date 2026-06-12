@@ -19,6 +19,19 @@ export async function git(root: string, args: string[]): Promise<string> {
   return stdout;
 }
 
+/** Commit hash for note frontmatter and logs, e.g. `a1b2c3d4` or `not detected`. */
+export function commitLabel(info: GitInfo | undefined): string {
+  return info?.commit ?? "not detected";
+}
+
+/** Human-readable git state for note snapshots, e.g. `a1b2c3d4 (dirty)` or `not detected`. */
+export function describeGitInfo(info: GitInfo | undefined): string {
+  if (info === undefined) {
+    return "not detected";
+  }
+  return `${info.commit}${info.dirty ? " (dirty)" : ""}`;
+}
+
 /** Short HEAD commit and dirty flag, or undefined when `root` is not a git repo. */
 export async function gitInfo(root: string): Promise<GitInfo | undefined> {
   try {

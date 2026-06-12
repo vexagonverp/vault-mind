@@ -8,9 +8,7 @@ triggers_en: ["init vault", "bootstrap vault", "setup vault", "create local vaul
 Use this workflow to create the smallest useful vault base. Prefer the CLI so
 the generated files stay consistent across agents.
 
-Use vault-mind. Run the CLI command below from the vault-mind repo:
-
-Run:
+Run from any shell where `vaultmind` is on `PATH`:
 
 ```bash
 vaultmind init --path <vault-path>
@@ -22,7 +20,8 @@ vault actually needs them. Do not overwrite existing notes.
 
 Do not create placeholder concept notes just to satisfy graph shape. Create
 concept notes only when they have useful durable content.
-After init, run:
+
+After init, install the agent skills and `AGENTS.md` into the vault:
 
 ```bash
 vaultmind build --out <vault-path>

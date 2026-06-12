@@ -1,3 +1,7 @@
+import type { GitInfo } from "../../core/git.js";
+import type { ManagedNoteResult } from "../../core/managed-notes.js";
+import type { OperationLogResult } from "../../core/operation-log.js";
+
 export interface ArchitectureManifest {
   root: string;
   name: string;
@@ -34,10 +38,7 @@ export interface ArchitectureManifest {
     makefile: boolean;
     ci: boolean;
   };
-  git: {
-    commit: string;
-    dirty: boolean;
-  } | undefined;
+  git: GitInfo | undefined;
 }
 
 export interface ArchitectOptions {
@@ -51,14 +52,6 @@ export interface ArchitectWriteOptions extends ArchitectOptions {
 
 export interface ArchitectResult {
   manifest: ArchitectureManifest;
-  operationLog: {
-    file: string;
-    entry: string;
-  };
-  changes: Array<{
-    file: string;
-    status: "created" | "updated" | "unchanged";
-    generatedChanged: boolean;
-    frontmatterChanged: boolean;
-  }>;
+  operationLog: OperationLogResult;
+  changes: ManagedNoteResult[];
 }

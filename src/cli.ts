@@ -6,12 +6,20 @@ import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { buildVault } from "./build.js";
 import { listCommands } from "./core/commands.js";
+import { commitLabel } from "./core/git.js";
+import type { ManagedNoteResult } from "./core/managed-notes.js";
 import { renderWorkflowPrompt, normalizeWorkflowName } from "./core/workflows.js";
-import { writeAntipatternNotes } from "./vault/antipatterns/index.js";
-import { writeArchitectureNotes } from "./vault/architect/index.js";
+import {
+  writeAntipatternNotes,
+  writeAntipatternIndex,
+  type AntipatternIndexResult,
+  type AntipatternResult,
+} from "./vault/antipatterns/index.js";
+import { writeArchitectureNotes, type ArchitectResult } from "./vault/architect/index.js";
 import { runHealthCheck } from "./vault/health/index.js";
-import { initVault } from "./vault/init/index.js";
+import { initVault, type InitVaultResult } from "./vault/init/index.js";
 import { reviewVault } from "./vault/review/index.js";
+import type { HealthResult, IssueReport, ReviewResult } from "./types.js";
 
 const filename = fileURLToPath(import.meta.url);
 const dirname = path.dirname(filename);
@@ -109,19 +117,26 @@ export function createProgram(root = repoRoot): Command {
 
   program
     .command("antipatterns")
-    .description("Scan a codebase's history for anti-pattern signals and scaffold a findings note")
+    .description("Scan a codebase's history for anti-pattern signals, or roll up the cross-repo index")
     .argument("[repo]", "repo path")
     .option("--repo <repo>", "repo path")
     .option("--vault <vault>", "vault path", "vault")
+    .option("--index", "build the cross-repo anti-pattern index from pattern tags")
     .option("--json", "print machine-readable JSON")
     .action(async (repo: string | undefined, options: {
       repo?: string;
       vault: string;
+      index?: boolean;
       json?: boolean;
     }) => {
+      const vaultPath = resolveVaultPath(options.vault);
+      if (options.index) {
+        await runAntipatternIndexAction(vaultPath, options.json);
+        return;
+      }
       await runAntipatternsAction(
         resolveRepoPath("antipatterns", options.repo, repo),
-        resolveVaultPath(options.vault),
+        vaultPath,
         options.json,
       );
     });
@@ -180,6 +195,10 @@ export function createProgram(root = repoRoot): Command {
       }
 
       if (name === "antipatterns") {
+        if (args[0] === "index") {
+          await runAntipatternIndexAction(vaultPath, options.json);
+          return;
+        }
         await runAntipatternsAction(resolveRepoPath("antipatterns", options.repo, args[0]), vaultPath, options.json);
         return;
       }
@@ -230,16 +249,26 @@ function parseInteger(value: string): number {
   return parsed;
 }
 
-async function runHealthAction(vaultPath: string, json?: boolean): Promise<void> {
-  const result = await runHealthCheck(vaultPath);
+// Print `result` as indented JSON when `--json` is set, otherwise via `print`.
+function emitResult<T>(result: T, json: boolean | undefined, print: (result: T) => void): void {
   if (json) {
     console.log(JSON.stringify(result, null, 2));
   } else {
-    printHealth(result);
+    print(result);
   }
-  if (result.issues.some((issue) => issue.severity !== "info")) {
+}
+
+// Issues above `info` severity fail the command for CI and scripting use.
+function flagFailingIssues(issues: Array<{ severity: string }>): void {
+  if (issues.some((issue) => issue.severity !== "info")) {
     process.exitCode = 1;
   }
+}
+
+async function runHealthAction(vaultPath: string, json?: boolean): Promise<void> {
+  const result = await runHealthCheck(vaultPath);
+  emitResult(result, json, printHealth);
+  flagFailingIssues(result.issues);
 }
 
 async function runInitAction(vaultPath: string): Promise<void> {
@@ -248,14 +277,8 @@ async function runInitAction(vaultPath: string): Promise<void> {
 
 async function runReviewAction(vaultPath: string, json?: boolean): Promise<void> {
   const result = await reviewVault(vaultPath);
-  if (json) {
-    console.log(JSON.stringify(result, null, 2));
-  } else {
-    printReview(result);
-  }
-  if (result.issues.some((issue) => issue.severity !== "info")) {
-    process.exitCode = 1;
-  }
+  emitResult(result, json, printReview);
+  flagFailingIssues(result.issues);
 }
 
 async function runArchitectAction(
@@ -265,14 +288,10 @@ async function runArchitectAction(
   maxModules?: number,
 ): Promise<void> {
   const result = await writeArchitectureNotes({ repoPath, vaultPath, ...(maxModules !== undefined && { maxModules }) });
-  if (json) {
-    console.log(JSON.stringify(result, null, 2));
-  } else {
-    printArchitect(result);
-  }
+  emitResult(result, json, printArchitect);
 }
 
-function printHealth(result: Awaited<ReturnType<typeof runHealthCheck>>): void {
+function printHealth(result: HealthResult): void {
   printIssueReport({
     vault: result.vault,
     scanned: result.scanned,
@@ -285,7 +304,7 @@ function printHealth(result: Awaited<ReturnType<typeof runHealthCheck>>): void {
   });
 }
 
-function printReview(result: Awaited<ReturnType<typeof reviewVault>>): void {
+function printReview(result: ReviewResult): void {
   printIssueReport({
     vault: result.vault,
     scanned: result.scanned,
@@ -298,18 +317,14 @@ function printReview(result: Awaited<ReturnType<typeof reviewVault>>): void {
   });
 }
 
-interface IssueReport {
-  vault: string;
-  scanned: string;
+// Presentation fields layered on the shared report shape for printing.
+interface IssueReportView extends IssueReport<{ severity: string; message: string }> {
   subtotalLabel: string;
   subtotal: number;
-  totalIssues: number;
-  counts: Record<string, number>;
-  issues: Array<{ severity: string; message: string }>;
   emptyMessage: string;
 }
 
-function printIssueReport(report: IssueReport): void {
+function printIssueReport(report: IssueReportView): void {
   console.log(`Vault: ${report.vault}`);
   console.log(`Scanned: ${report.scanned}`);
   console.log(`${report.subtotalLabel}: ${report.subtotal}`);
@@ -336,7 +351,7 @@ function printIssueReport(report: IssueReport): void {
   }
 }
 
-function printInit(result: Awaited<ReturnType<typeof initVault>>): void {
+function printInit(result: InitVaultResult): void {
   console.log(`Vault: ${result.vault}`);
   console.log(`Created files: ${result.created.length}`);
   console.log(`Skipped files: ${result.skipped.length}`);
@@ -352,28 +367,39 @@ async function runAntipatternsAction(
   json?: boolean,
 ): Promise<void> {
   const result = await writeAntipatternNotes({ repoPath, vaultPath });
-  if (json) {
-    console.log(JSON.stringify(result, null, 2));
-  } else {
-    printAntipatterns(result);
-  }
+  emitResult(result, json, printAntipatterns);
 }
 
-function printAntipatterns(result: Awaited<ReturnType<typeof writeAntipatternNotes>>): void {
+function printAntipatterns(result: AntipatternResult): void {
   const { signals } = result;
   console.log(`Repo: ${signals.root}`);
   console.log(`Name: ${signals.name}`);
-  console.log(`Scan commit: ${signals.git?.commit ?? "not detected"}`);
+  console.log(`Scan commit: ${commitLabel(signals.git)}`);
   console.log(`History: ${signals.scanSource === "git" ? `${signals.commitsScanned} commits` : "no git history"}`);
   console.log(`Hotspots: ${signals.hotspotFiles.length}, fix-prone: ${signals.fixProneFiles.length}, remediation commits: ${signals.remediationCommits.length}`);
   printChangeList(result.changes, result.operationLog.file);
 }
 
-function printArchitect(result: Awaited<ReturnType<typeof writeArchitectureNotes>>): void {
+async function runAntipatternIndexAction(vaultPath: string, json?: boolean): Promise<void> {
+  emitResult(await writeAntipatternIndex(vaultPath), json, printAntipatternIndex);
+}
+
+function printAntipatternIndex(result: AntipatternIndexResult): void {
+  const { patterns } = result.index;
+  console.log(`Index: ${result.file}`);
+  console.log(`Patterns: ${patterns.length}`);
+  for (const pattern of patterns) {
+    const active = pattern.instances - pattern.resolved;
+    const tag = pattern.defined ? "" : " (undefined)";
+    console.log(`- ${pattern.name}${tag}: ${active} active, ${pattern.resolved} resolved [${pattern.repos.join(", ") || "-"}]`);
+  }
+}
+
+function printArchitect(result: ArchitectResult): void {
   console.log(`Repo: ${result.manifest.root}`);
   console.log(`Name: ${result.manifest.name}`);
   console.log(`Kind: ${result.manifest.kind ?? "unknown"}`);
-  console.log(`Scan commit: ${result.manifest.git?.commit ?? "not detected"}`);
+  console.log(`Scan commit: ${commitLabel(result.manifest.git)}`);
   console.log(`Source areas: ${result.manifest.modules.length}`);
   printChangeList(result.changes, result.operationLog.file, changeReason);
 }
@@ -390,7 +416,7 @@ function printChangeList<T extends { status: string; file: string }>(
   console.log(`Operation log: ${operationLogFile}`);
 }
 
-function changeReason(change: Awaited<ReturnType<typeof writeArchitectureNotes>>["changes"][number]): string {
+function changeReason(change: ManagedNoteResult): string {
   const parts: string[] = [];
   if (change.generatedChanged) parts.push("generated");
   if (change.frontmatterChanged) parts.push("frontmatter");
